@@ -2,11 +2,18 @@ CONNECT_DEFAULT_LIMIT=5
 CONNECT_SIGNAL_THRESHOLD=20
 
 cmd_connect() {
-    echo "Scanning for networks..."
+    source "$COMMANDS_DIR/spinner.sh"
 
-    # Force a fresh scan; fields: active marker, network name, signal (0-100), security type
+    # Background the nmcli scan so we can spin while it rescans the radio
+    local raw_file
+    raw_file=$(mktemp)
+    nmcli -t -f IN-USE,SSID,SIGNAL,SECURITY dev wifi list >"$raw_file" 2>/dev/null &
+    show_spinner "Scanning for networks..." "$!"
+    wait "$!" || true
+
     local raw
-    raw=$(nmcli -t -f IN-USE,SSID,SIGNAL,SECURITY dev wifi list 2>/dev/null)
+    raw=$(cat "$raw_file")
+    rm -f "$raw_file"
 
     if [[ -z "$raw" ]]; then
         echo "No networks found."
@@ -125,14 +132,7 @@ cmd_connect() {
             fi
             local connect_pid=$!
 
-            local spin_chars='-\|/'
-            local i=0
-            while kill -0 "$connect_pid" 2>/dev/null; do
-                printf "\r  Connecting... ${spin_chars:$i:1}"
-                i=$(( (i + 1) % 4 ))
-                sleep 0.1
-            done
-            printf "\r\033[2K"
+            show_spinner "Connecting..." "$connect_pid"
 
             if wait "$connect_pid"; then
                 echo "$chosen_ssid connected!"

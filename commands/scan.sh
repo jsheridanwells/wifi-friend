@@ -5,12 +5,18 @@ cmd_scan() {
     local show_all=false
     [[ "${1:-}" == "--all" ]] && show_all=true
 
-    echo "Scanning for networks..."
+    source "$COMMANDS_DIR/spinner.sh"
 
-    # Force a fresh scan; fields: active marker, network name, signal (0-100), security type
-    # nmcli returns one row per access point (physical radio), sorted by signal descending
+    # Background the nmcli scan so we can spin while it rescans the radio
+    local raw_file
+    raw_file=$(mktemp)
+    nmcli -t -f IN-USE,SSID,SIGNAL,SECURITY dev wifi list >"$raw_file" 2>/dev/null &
+    show_spinner "Scanning for networks..." "$!"
+    wait "$!" || true
+
     local raw
-    raw=$(nmcli -t -f IN-USE,SSID,SIGNAL,SECURITY dev wifi list 2>/dev/null)
+    raw=$(cat "$raw_file")
+    rm -f "$raw_file"
 
     if [[ -z "$raw" ]]; then
         echo "No networks found."

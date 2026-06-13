@@ -24,7 +24,11 @@ cmd_disconnect() {
     local wifi_device
     wifi_device=$(nmcli -t -f DEVICE,TYPE dev | grep ':wifi' | head -1 | cut -d: -f1)
 
-    if ! nmcli dev disconnect "$wifi_device" &>/dev/null; then
+    source "$COMMANDS_DIR/spinner.sh"
+
+    nmcli dev disconnect "$wifi_device" &>/dev/null &
+    show_spinner "Disconnecting..." "$!"
+    if ! wait "$!"; then
         echo "Failed to disconnect." >&2
         echo "You can try manually: nmcli dev disconnect $wifi_device" >&2
         return 1
