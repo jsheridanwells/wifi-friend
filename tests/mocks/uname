@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Mock uname — init.sh calls `uname -s` to tell Linux from macOS (Darwin).
+# MOCK_UNAME controls the reported OS (defaults to Linux).
+if [[ "${1:-}" == "-s" ]]; then
+    echo "${MOCK_UNAME:-Linux}"
+else
+    echo "${MOCK_UNAME:-Linux}"
+fi

@@ -2,7 +2,9 @@ cmd_list() {
     # connection show lists all NetworkManager profiles (vpn, ethernet, wifi, etc.)
     # grep filters to wifi-only by matching the 802-11-wireless type field
     local raw
-    raw=$(nmcli -t -f NAME,TYPE,ACTIVE connection show 2>/dev/null | grep ':802-11-wireless:')
+    # || true: grep exits 1 when no wifi profiles match, which would otherwise
+    # abort the script under 'set -e' before we can print the empty-state message
+    raw=$(nmcli -t -f NAME,TYPE,ACTIVE connection show 2>/dev/null | grep ':802-11-wireless:' || true)
 
     if [[ -z "$raw" ]]; then
         echo "No saved networks found."

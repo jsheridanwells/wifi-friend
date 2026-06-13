@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Mock systemctl — only used by init.sh to check if NetworkManager is running.
+# Exit code is controlled by MOCK_SYSTEMCTL_RC (0 = active, non-zero = inactive).
+exit "${MOCK_SYSTEMCTL_RC:-0}"
