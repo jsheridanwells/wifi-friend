@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+# Mock nmcli for the wifi test suite.
+# It never touches real hardware — it answers based on MOCK_* environment
+# variables that each test sets. Argument patterns mirror exactly how the
+# real commands invoke nmcli (see grep of commands/*.sh).
+
+# Returns success (0) if the given SSID is in MOCK_KNOWN_SSIDS, else fails (1).
+# Used by connect.sh to decide whether a saved profile already exists.
+is_known() {
+    local target="$1" s
+    for s in ${MOCK_KNOWN_SSIDS:-}; do
+        [[ "$s" == "$target" ]] && exit 0
+    done
+    exit 1
+}
+
+# Picks the connection outcome for this attempt. If MOCK_CONNECT_MODES (a
+# space-separated sequence like "badpass success") and a counter file are set,
+# it advances through them call-by-call so we can test wrong-then-right retries.
+# Otherwise it falls back to the single MOCK_CONNECT_MODE.
+next_connect_mode() {
+    if [[ -n "${MOCK_CONNECT_MODES:-}" && -n "${MOCK_CONNECT_COUNTER:-}" ]]; then
+        local idx
+        idx="$(cat "$MOCK_CONNECT_COUNTER" 2>/dev/null)"
+        [[ -z "$idx" ]] && idx=0
+        local arr=($MOCK_CONNECT_MODES)
+        local last=$(( ${#arr[@]} - 1 ))
+        local mode="${arr[$idx]:-${arr[$last]}}"
+        printf '%s' "$(( idx + 1 ))" > "$MOCK_CONNECT_COUNTER"
+        echo "$mode"
+    else
+        echo "${MOCK_CONNECT_MODE:-success}"
+    fi
+}
+
+# Simulates `nmcli dev wifi connect <ssid> [password <pw>]`.
+do_connect() {
+    local ssid="$4"
+    case "$(next_connect_mode)" in
+        success)
+            echo "Device successfully activated with connection."
+            exit 0
+            ;;
+        badpass)
+            # This is the exact phrase connect.sh greps for to detect a bad password
+            echo "Error: Connection activation failed: (7) Secrets were required, but not provided." >&2
+            exit 1
+            ;;
+        fail|*)
+            echo "Error: No network with SSID '$ssid' found." >&2
+            exit 1
+            ;;
+    esac
+}
+
+case "${1:-}" in
+    -t)
+        # Terse data queries. The requested fields are in $3 (after -t -f).
+        case "$3" in
+            ACTIVE,SSID,SIGNAL)          printf '%s\n' "${MOCK_STATUS_LIST:-}" ;;
+            IN-USE,SSID,SIGNAL,SECURITY) printf '%s\n' "${MOCK_WIFI_LIST:-}" ;;
+            NAME,TYPE,ACTIVE)            printf '%s\n' "${MOCK_CONN_LIST:-}" ;;
+            ACTIVE,SSID)                 printf '%s\n' "${MOCK_ACTIVE_LIST:-}" ;;
+            DEVICE,TYPE)                 printf '%s\n' "${MOCK_DEV_LIST:-}" ;;
+        esac
+        ;;
+    radio)
+        # `nmcli radio wifi`
+        echo "${MOCK_RADIO:-enabled}"
+        ;;
+    --version)
+        echo "nmcli tool, version 1.50.0 (mock)"
+        ;;
+    connection)
+        case "${2:-}" in
+            show)   is_known "${3:-}" ;;   # `connection show <ssid>` — known-profile check
+            delete) exit 0 ;;              # `connection delete <ssid>`
+        esac
+        ;;
+    dev)
+        case "${2:-}" in
+            disconnect) exit "${MOCK_DISCONNECT_RC:-0}" ;;
+            wifi)       [[ "${3:-}" == "connect" ]] && do_connect "$@" ;;
+        esac
+        ;;
+esac
+
+exit 0
